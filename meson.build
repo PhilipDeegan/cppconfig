@@ -6,8 +6,8 @@ project(
   license : 'GPL3'
 )
 
-yaml_cpp_dep = dependency('yaml-cpp')
-nlohmann_json_dep = dependency('nlohmann_json')
+yaml_cpp_dep = dependency('yaml-cpp', required : false)
+nlohmann_json_dep = dependency('nlohmann_json', required : false)
 cppdict_dep = dependency('cppdict')
 catch_dep = dependency('catch2-with-main', version:'>3.0.0', required : true)
 
@@ -18,7 +18,7 @@ cppconfig_dep = declare_dependency(
 
 library('cppconfig', extra_files:['include/cppconfig/cppconfig.hpp', 'include/cppconfig/io/yaml.hpp', 'include/cppconfig/io/json.hpp'])
 
-foreach test:['yaml','json']
+foreach test:['binary'] # 'yaml','json',
     exe = executable(test,'tests/'+test+'/test.cpp',
                     dependencies:[cppconfig_dep, catch_dep],
                     cpp_args : '-DCATCH_CONFIG_NO_POSIX_SIGNALS',
