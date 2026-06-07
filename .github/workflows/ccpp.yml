@@ -2,58 +2,34 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   gcc:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - name: Configure with CMake
-      run: cmake -DBUILD_TEST:bool=ON -S . -B build_cmake
-    - name: Build (CMake)
-      run: cmake --build build_cmake
-    - name: Run tests (CMake)
-      run: cd build_cmake && ctest && cd ..  
+    - name: update Meson
+      run: python3 -m pip install meson -U
+    - name: Configure with Meson
+      run: meson . build
+    - name: Build (meson)
+      run: ninja -C build
+    - name: Run tests (meson)
+      run: ninja test -C build
 
   clang:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - name: Configure with CMake
-      run: cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DBUILD_TEST:bool=ON -S . -B build_cmake
-    - name: Build (CMake)
-      run: cmake --build build_cmake
-    - name: Run tests (CMake)
-      run: cd build_cmake && ctest && cd ..
-
-  coverage:
-    runs-on: ubuntu-latest
-    container: jeandet/simple_cxx_fedora
-    steps:
-    - uses: actions/checkout@v6
     - name: update Meson
       run: python3 -m pip install meson -U
     - name: Configure with Meson
-      run: meson -Db_coverage=true . build
+      run: CC=clang CXX=clang++ meson . build
     - name: Build (meson)
       run: ninja -C build
     - name: Run tests (meson)
       run: ninja test -C build
-    - name: Generate Coverage repport
-      run: |
-        lcov --capture --directory . --output-file coverage.info
-        lcov --remove coverage.info '/usr/*' --output-file coverage.info
-        lcov --remove coverage.info '*/catch.hpp' --output-file coverage.info
-        lcov --list coverage.info
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./coverage.info
-        flags: unittests
-        name: codecov-cdfpp
-        yml: ./codecov.yml
-        fail_ci_if_error: true
+

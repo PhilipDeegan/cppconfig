@@ -15,7 +15,7 @@ section2:
   key_section2: value
 )");
 
-TEST_CASE("YAML to Dict", "[]")
+TEST_CASE("YAML to Dict")
 {
     auto config = cppconfig::from_yaml(YML);
     REQUIRE(config["section1"]["key_string"].to<std::string>("") == "a string");

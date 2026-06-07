@@ -21,7 +21,7 @@ const auto JSON = std::string(R"(
 }
 )");
 
-TEST_CASE("JSON to Dict", "[]")
+TEST_CASE("JSON to Dict")
 {
     auto config = cppconfig::from_json(JSON);
     REQUIRE(config["section1"]["key_string"].to<std::string>("") == "a string");
@@ -32,7 +32,7 @@ TEST_CASE("JSON to Dict", "[]")
     REQUIRE(config["section2"]["key_section2"].to<std::string>("") == "value");
 }
 
-TEST_CASE("Dict to JSON", "[]")
+TEST_CASE("Dict to JSON")
 {
     cppconfig::Config c;
     c["section1"] = 10;
