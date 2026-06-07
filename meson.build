@@ -18,7 +18,7 @@ cppconfig_dep = declare_dependency(
 
 library('cppconfig', extra_files:['include/cppconfig/cppconfig.hpp', 'include/cppconfig/io/yaml.hpp', 'include/cppconfig/io/json.hpp'])
 
-foreach test:['yaml','json']
+foreach test:['binary', 'yaml', 'json']
     exe = executable(test,'tests/'+test+'/test.cpp',
                     dependencies:[cppconfig_dep, catch_dep],
                     cpp_args : '-DCATCH_CONFIG_NO_POSIX_SIGNALS',
