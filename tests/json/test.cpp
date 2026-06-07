@@ -1,15 +1,8 @@
-#define CATCH_CONFIG_MAIN
-#if __has_include(<catch2/catch.hpp>)
-#include <catch2/catch.hpp>
-#include <catch2/catch_reporter_tap.hpp>
-#include <catch2/catch_reporter_teamcity.hpp>
-#else
-#include <catch.hpp>
-#include <catch_reporter_tap.hpp>
-#include <catch_reporter_teamcity.hpp>
-#endif
+
 #include "cppconfig/cppconfig.hpp"
-#include <cstdint>
+
+#include <catch2/catch_test_macros.hpp>
+
 
 const auto JSON = std::string(R"(
 {
@@ -48,7 +41,8 @@ TEST_CASE("Dict to JSON", "[]")
     c["section4"] = true;
     auto c2 = cppconfig::from_json(cppconfig::to_json(c));
     REQUIRE(c2["section1"].to<int>(0) == c["section1"].to<int>(-1));
-    REQUIRE(c["section2"]["field"].to<std::string>("") == c["section2"]["field"].to<std::string>("~"));
+    REQUIRE(
+        c["section2"]["field"].to<std::string>("") == c["section2"]["field"].to<std::string>("~"));
     REQUIRE(c2["section3"].to<double>(0) == c["section3"].to<double>(-1));
     REQUIRE(c2["section4"].to<bool>(true) == c["section4"].to<bool>(false));
 }

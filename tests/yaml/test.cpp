@@ -1,15 +1,7 @@
-#define CATCH_CONFIG_MAIN
-#if __has_include(<catch2/catch.hpp>)
-#include <catch2/catch.hpp>
-#include <catch2/catch_reporter_tap.hpp>
-#include <catch2/catch_reporter_teamcity.hpp>
-#else
-#include <catch.hpp>
-#include <catch_reporter_tap.hpp>
-#include <catch_reporter_teamcity.hpp>
-#endif
+
 #include "cppconfig/cppconfig.hpp"
-#include <cstdint>
+
+#include <catch2/catch_test_macros.hpp>
 
 const auto YML = std::string(R"(
 section1:

@@ -9,7 +9,7 @@ project(
 yaml_cpp_dep = dependency('yaml-cpp')
 nlohmann_json_dep = dependency('nlohmann_json')
 cppdict_dep = dependency('cppdict')
-catch_dep = dependency('catch2', main : true)
+catch_dep = dependency('catch2-with-main', version:'>3.0.0', required : true)
 
 cppconfig_dep = declare_dependency(
                         include_directories: include_directories('include'),
