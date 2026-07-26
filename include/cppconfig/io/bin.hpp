@@ -20,15 +20,19 @@
 --                     Mail : alexis.jeandet@lpp.polytechnique.fr
 ----------------------------------------------------------------------------*/
 #pragma once
-#include <dict.hpp>
-#include <stdexcept>
-#include <variant>
+
+
 #include <cassert>
+#include <cstdint>
 #include <fstream>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <type_traits>
+#include <variant>
 
+#include "dict.hpp"
 
 namespace cppconfig::config_binary
 {
@@ -69,94 +73,40 @@ void _write_data(T const data, std::size_t const size, std::ofstream& out)
     out.write(reinterpret_cast<char const* const>(data), size);
 }
 
-template <typename...>
-using tryToInstanciate = void;
-
-template <typename T, typename data = void, typename size = void>
-struct is_spannable : std::false_type
-{
-};
+template <typename T>
+inline bool constexpr always_false_v = false;
 
 template <typename T>
-struct is_spannable<T, tryToInstanciate<decltype(std::declval<T>().data())>,
-    tryToInstanciate<decltype(std::declval<T>().size())>> : std::true_type
-{
-};
-
-template <typename T>
-bool constexpr static is_spannable_v = is_spannable<T>::value;
-
-
-template <typename Dict, typename T, typename serializable = void, typename unserializable = void>
-struct is_custom_serializable : std::false_type
-{
+concept Spannable = requires(T const& t) {
+    t.data();
+    t.size();
 };
 
 template <typename Dict, typename T>
-auto constexpr static has_custom_serialize(Dict& dict, T const& data)
-    -> decltype(serialize(dict, data), bool())
-{
-    return true;
-}
-template <typename... Args>
-auto constexpr static has_custom_serialize(Args&&...)
-{
-    return false;
-}
-template <typename Dict, typename T>
-auto constexpr static has_custom_deserialize(Dict const& dict, T& data)
-    -> decltype(deserialize(dict, data), bool())
-{
-    return true;
-}
-template <typename... Args>
-auto constexpr static has_custom_deserialize(Args&&...)
-{
-    return false;
-}
-
+concept HasSerialize = requires(Dict& dict, T const& data) { serialize(dict, data); };
 
 template <typename Dict, typename T>
-struct is_custom_serializable<Dict, T,
-    tryToInstanciate<decltype(serialize(std::declval<Dict&>(), std::declval<T const&>()))>,
-    tryToInstanciate<decltype(deserialize(std::declval<Dict const&>(), std::declval<T&>()))>>
-        : std::true_type
+concept HasDeserialize = requires(Dict const& dict, T& data) { deserialize(dict, data); };
+
+template <typename Dict, typename T>
+concept IsCustomSerializable = HasSerialize<Dict, T> and HasDeserialize<Dict, T>;
+
+
+template <typename E>
+constexpr auto as_underlying_type(E e) noexcept // can be removed in C++23
 {
+    return static_cast<std::underlying_type_t<E>>(e);
+}
+
+// Leading tag written before every chunk on the wire.
+enum class ChunkType : std::uint8_t
+{
+    map = 0, // map indiciator, followed directly by map_size
+    map_entry = 1, // key, then exactly one nested chunk holding the value
+    // values >= n_base_chunk_types identify one of Config's leaf types by its index in Tuple
 };
 
-
-template <typename Dict, typename T>
-bool constexpr static is_custom_serializable_v = is_custom_serializable<Dict, T>::value;
-
-
-template <typename Dict, typename T>
-auto constexpr static _custom_serialize(Dict& dict, T const& data)
-    -> decltype(serialize(dict, data), bool())
-{
-    serialize(dict, data);
-    return true;
-}
-
-template <typename... Args>
-auto constexpr static _custom_serialize(Args&&...)
-{
-    return false;
-}
-
-
-template <typename Dict, typename T>
-auto constexpr static _custom_deserialize(Dict const& dict, T& data)
-    -> decltype(deserialize(dict, data), bool())
-{
-    deserialize(dict, data);
-    return true;
-}
-
-template <typename... Args>
-auto constexpr static _custom_deserialize(Args&&...)
-{
-    return false;
-}
+std::uint8_t constexpr n_base_chunk_types = as_underlying_type(ChunkType::map_entry) + 1;
 
 
 template <typename... Ts>
@@ -177,7 +127,8 @@ class DictSerializer
     using node_t = typename Dict::node_t;
     using Tuple = std::decay_t<decltype(dict_types_as_tuple(std::declval<Config>()))>;
     std::size_t constexpr static n_types = std::tuple_size_v<Tuple>;
-    std::size_t constexpr static base = 2; // 0 = map, 1 = map_key_string
+    static_assert(n_types + n_base_chunk_types <= std::numeric_limits<std::uint8_t>::max(),
+        "cppconfig: too many leaf types for a single-byte chunk tag");
     using NodeVisitor = std::function<void(std::string const&, node_t const&)>;
 
 public:
@@ -197,7 +148,7 @@ private:
 
             if constexpr (std::is_same_v<El, data_t>)
             {
-                std::size_t const type = 1;
+                auto const type = as_underlying_type(ChunkType::map_entry);
                 _write_data(&type, sizeof(type), out);
                 std::size_t const size = key.size();
                 _write_data(&size, sizeof(size), out);
@@ -207,7 +158,7 @@ private:
             }
             else if constexpr (Dict::template is_value<El>::value)
             {
-                std::size_t const type = 1;
+                auto const type = as_underlying_type(ChunkType::map_entry);
                 _write_data(&type, sizeof(type), out);
                 std::size_t const size = key.size();
                 _write_data(&size, sizeof(size), out);
@@ -261,7 +212,7 @@ private:
     NodeVisitor const node_visitor = [&](std::string const& key, node_t const& v)
     {
         {
-            std::size_t const type = 0;
+            auto const type = as_underlying_type(ChunkType::map);
             _write_data(&type, sizeof(type), out);
             std::size_t const size = key.size();
             _write_data(&size, sizeof(size), out);
@@ -286,11 +237,10 @@ private:
     };
 
 
-
     template <typename T>
     void _serialize_data(T const& data)
     {
-        if constexpr (is_spannable_v<T>)
+        if constexpr (Spannable<T>)
         {
             std::size_t const size = data.size();
             _write_data(&size, sizeof(size), out);
@@ -301,18 +251,25 @@ private:
             std::size_t const size = sizeof(T);
             _write_data(&data, size, out);
         }
-        else if constexpr (is_custom_serializable_v<Config, T>)
+        else if constexpr (IsCustomSerializable<Config, T>)
         {
             Dict temp;
-            _custom_serialize(temp, data);
+            serialize(temp, data);
             // Write entry count so the deserializer knows how many chunks to consume
             auto const& root_map = std::get<typename Dict::node_t>(temp.data);
             std::size_t const entry_count = root_map.size();
             _write_data(&entry_count, sizeof(entry_count), out);
             (*this)(temp);
         }
+        else if constexpr (HasSerialize<Dict, T>)
+            static_assert(always_false_v<T>,
+                "cppconfig: T has a serialize() overload but no "
+                "matching deserialize() overload - both are required");
         else
-            _serialize(data);
+            static_assert(always_false_v<T>,
+                "cppconfig: T is not fundamental, spannable (has data()/size()), or "
+                "custom-serializable - define matching serialize(Dict&, T const&) and "
+                "deserialize(Dict const&, T&) overloads for it");
     }
 
 
@@ -323,7 +280,7 @@ private:
             return;
         if constexpr (std::is_same_v<T, std::tuple_element_t<I, Tuple>>)
         {
-            std::size_t const type = I + base;
+            auto const type = static_cast<std::uint8_t>(I + n_base_chunk_types);
             _write_data(&type, sizeof(type), out);
             b = 1;
         }
@@ -350,12 +307,12 @@ class DictDeSerializer
     using data_t = typename Dict::data_t;
     using Tuple = std::decay_t<decltype(dict_types_as_tuple(std::declval<Config>()))>;
     std::size_t constexpr static n_types = std::tuple_size_v<Tuple>;
-    std::size_t constexpr static base = 2; // 0 = map, 1 = map_key_string
+    static_assert(n_types + n_base_chunk_types <= std::numeric_limits<std::uint8_t>::max(),
+        "cppconfig: too many leaf types for a single-byte chunk tag");
 
 public:
     DictDeSerializer(std::string const& filename_) : filename { filename_ } { }
 
-    template <bool silence_unserializable = false>
     auto operator()()
     {
         Dict dict;
@@ -374,7 +331,7 @@ private:
         if (!node.isEmpty())
             throw std::runtime_error("_deserialize_data: target node is not empty");
 
-        if constexpr (is_spannable_v<T>)
+        if constexpr (Spannable<T>)
         {
             std::size_t size = 0;
 
@@ -391,7 +348,7 @@ private:
             in.read(reinterpret_cast<char*>(&d), sizeof(T));
             node = d;
         }
-        else if constexpr (is_custom_serializable_v<Config, T>)
+        else if constexpr (IsCustomSerializable<Config, T>)
         {
             std::size_t entry_count = 0;
             in.read(reinterpret_cast<char*>(&entry_count), sizeof(entry_count));
@@ -402,18 +359,25 @@ private:
             deserialize(loader, t);
             node = t;
         }
+        else if constexpr (HasDeserialize<Dict, T>)
+            static_assert(always_false_v<T>,
+                "cppconfig: T has a deserialize() overload but no "
+                "matching serialize() overload - both are required");
         else
-            throw std::runtime_error("_deserialize_data: unsupported type");
+            static_assert(always_false_v<T>,
+                "cppconfig: T is not fundamental, spannable (has data()/size()), or "
+                "custom-serializable - define matching serialize(Dict&, T const&) and "
+                "deserialize(Dict const&, T&) overloads for it");
     }
 
     void _read_chunk(Dict& node)
     {
-        std::size_t type = 0;
-        in.read(reinterpret_cast<char*>(&type), sizeof(std::size_t));
-        if (type > n_types + 2)
+        std::uint8_t type = 0;
+        in.read(reinterpret_cast<char*>(&type), sizeof(type));
+        if (type >= n_types + n_base_chunk_types)
             throw std::runtime_error("_read_chunk: unknown type id " + std::to_string(type));
 
-        if (type == 0)
+        if (type == as_underlying_type(ChunkType::map))
         {
             std::size_t size = 0;
             in.read(reinterpret_cast<char*>(&size), sizeof(std::size_t));
@@ -426,7 +390,7 @@ private:
             for (std::size_t i = 0; i < keys; ++i)
                 _read_chunk(child);
         }
-        else if (type == 1)
+        else if (type == as_underlying_type(ChunkType::map_entry))
         {
             std::size_t size = 0;
             in.read(reinterpret_cast<char*>(&size), sizeof(std::size_t));
@@ -442,12 +406,12 @@ private:
     }
 
     template <std::size_t I>
-    void _read(Dict& node, int& found, std::size_t const& type)
+    void _read(Dict& node, int& found, std::uint8_t type)
     {
         using El = std::tuple_element_t<I, Tuple>;
 
         if constexpr (Dict::template is_value<El>::value)
-            if (I + base == type)
+            if (I + n_base_chunk_types == type)
             {
                 _deserialize_data<El>(node);
                 found += 1;
@@ -455,12 +419,13 @@ private:
     }
 
     template <std::size_t... Is>
-    void read(Dict& node, std::size_t const& type, std::integer_sequence<std::size_t, Is...>)
+    void read(Dict& node, std::uint8_t type, std::integer_sequence<std::size_t, Is...>)
     {
         int found = 0;
         (_read<Is>(node, found, type), ...);
         if (found != 1)
-            throw std::runtime_error("_read: expected exactly one matching type, found " + std::to_string(found));
+            throw std::runtime_error(
+                "_read: expected exactly one matching type, found " + std::to_string(found));
     }
 
 
@@ -469,6 +434,4 @@ private:
 };
 
 
-} // namespace cppdict
-
-
+} // namespace cppconfig::config_binary
