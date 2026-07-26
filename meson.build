@@ -2,7 +2,7 @@ project(
   'cppconfig',
   'cpp',
   version : '0.0.1',
-  default_options : ['warning_level=3', 'cpp_std=c++17'],
+  default_options : ['warning_level=3', 'cpp_std=c++20'],
   license : 'GPL3'
 )
 
@@ -18,7 +18,7 @@ cppconfig_dep = declare_dependency(
 
 library('cppconfig', extra_files:['include/cppconfig/cppconfig.hpp', 'include/cppconfig/io/yaml.hpp', 'include/cppconfig/io/json.hpp'])
 
-foreach test:['yaml','json']
+foreach test:['binary', 'yaml', 'json']
     exe = executable(test,'tests/'+test+'/test.cpp',
                     dependencies:[cppconfig_dep, catch_dep],
                     cpp_args : '-DCATCH_CONFIG_NO_POSIX_SIGNALS',
