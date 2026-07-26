@@ -1,7 +1,6 @@
 
-// #include <catch2/catch.hpp>
-// #include <catch2/catch_reporter_tap.hpp>
-// #include <catch2/catch_reporter_teamcity.hpp>
+
+
 #include <catch2/catch_test_macros.hpp>
 
 #include "cppconfig/io/bin.hpp"
@@ -64,7 +63,7 @@ void deserialize(cppdict::Dict<Args...> const& dict, CustomSerializable& cm)
 TEST_CASE("can read/write custom serializable", "[cppconfig]")
 {
     using MyDict = cppdict::Dict<int, double, std::string, CustomSerializable>;
-    static_assert(cppconfig::config_binary::is_custom_serializable_v<MyDict, CustomSerializable>);
+    static_assert(cppconfig::config_binary::IsCustomSerializable<MyDict, CustomSerializable>);
 
     CustomSerializable const cs {};
 
@@ -78,7 +77,7 @@ TEST_CASE("can read/write custom serializable", "[cppconfig]")
             md["custom"]["data"]["cm.b"] = cs.b;
             md["custom"]["other"] = 3.3;
             md["key2"] = 2;
-            static_assert(cppconfig::config_binary::has_custom_serialize(md, cs));
+            static_assert(cppconfig::config_binary::HasSerialize<MyDict, CustomSerializable>);
 
             cppconfig::config_binary::save_config(file, md);
         }
@@ -104,7 +103,7 @@ TEST_CASE("can read/write custom serializable", "[cppconfig]")
             md["custom"]["data"] = cs;
             md["custom"]["other"] = 3.3;
             md["key2"] = 2;
-            static_assert(cppconfig::config_binary::has_custom_serialize(md, cs));
+            static_assert(cppconfig::config_binary::HasSerialize<MyDict, CustomSerializable>);
 
             cppconfig::config_binary::save_config(file, md);
         }
