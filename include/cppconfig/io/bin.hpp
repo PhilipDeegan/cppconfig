@@ -31,7 +31,7 @@
     leaf      := u8(2 + index of T in Dict<Ts...>) payload(T)
 
     payload(fundamental T)        := raw bytes of T
-    payload(contiguous T)         := size(n) raw bytes of n T::value_type
+    payload(Spannable T)          := size(n) raw bytes of n value_t<T>
     payload(custom serializable)  := size(count) chunk{count}
 */
 
@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <fstream>
 #include <limits>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -78,14 +79,19 @@ concept HasDeserialize = requires(Dict const& dict, T& data) { deserialize(dict,
 template <typename Dict, typename T>
 concept IsCustomSerializable = HasSerialize<Dict, T> and HasDeserialize<Dict, T>;
 
-// contiguous container whose elements can be written as raw bytes
+// owning contiguous container whose elements can be written as raw bytes, e.g. std::array
+// views (std::span, ...) are excluded: a leaf must own what is read back into it
 template <typename T>
-concept Spannable = requires(T& t, T const& ct, std::size_t n) {
-    typename T::value_type;
-    { ct.data() } -> std::convertible_to<typename T::value_type const*>;
-    { ct.size() } -> std::convertible_to<std::size_t>;
-    t.resize(n);
-} and std::is_trivially_copyable_v<typename T::value_type>;
+concept Spannable = std::ranges::contiguous_range<T> and std::ranges::sized_range<T>
+    and !std::ranges::view<T> and std::default_initializable<T>
+    and std::is_trivially_copyable_v<std::ranges::range_value_t<T>>;
+
+// Spannable whose length is only known at runtime, e.g. std::vector, std::string
+template <typename T>
+concept ResizableContiguous = Spannable<T> and requires(T& t, std::size_t n) { t.resize(n); };
+
+template <typename T>
+using value_t = std::ranges::range_value_t<T>;
 
 template <typename T>
 concept Fundamental = std::is_fundamental_v<T>;
@@ -133,7 +139,8 @@ struct BinaryTraits<cppdict::Dict<Ts...>>
 
     template <typename T>
         requires(count_of<T> == 1)
-    static constexpr tag_t tag_of = []() {
+    static constexpr tag_t tag_of = []()
+    {
         constexpr std::array is_T { std::same_as<T, Ts>... };
         return static_cast<tag_t>(
             std::ranges::find(is_T, true) - is_T.begin() + n_base_chunk_types);
@@ -234,8 +241,8 @@ private:
     {
         if constexpr (Spannable<T>)
         {
-            _write(data.size());
-            _write_data(data.data(), data.size() * sizeof(typename T::value_type), out);
+            _write(std::ranges::size(data));
+            _write_data(std::ranges::data(data), std::ranges::size(data) * sizeof(value_t<T>), out);
         }
         else if constexpr (Fundamental<T>)
             _write(data);
@@ -319,7 +326,9 @@ private:
                 _read_chunks(child, _read<std::size_t>());
                 break;
             }
-            case ChunkType::map_entry: _read_leaf(_read_key(parent)); break;
+            case ChunkType::map_entry:
+                _read_leaf(_read_key(parent));
+                break;
             default:
                 throw std::runtime_error("cppconfig: expected map or map_entry chunk, got "
                     + std::to_string(static_cast<int>(type)));
@@ -335,8 +344,7 @@ private:
         [&]<typename... Ts>(cppdict::Dict<Ts...>*)
         {
             // tags are unique (BinaryTraits) and range checked, so exactly one matches
-            (void)((Traits::template tag_of<Ts> == tag ? (node = _read_payload<Ts>(), true)
-                                                       : false)
+            (void)((Traits::template tag_of<Ts> == tag ? (node = _read_payload<Ts>(), true) : false)
                 or ...);
         }(static_cast<Dict*>(nullptr));
     }
@@ -346,9 +354,15 @@ private:
     {
         if constexpr (Spannable<T>)
         {
-            T s;
-            s.resize(_read<std::size_t>());
-            _read_data(s.data(), s.size() * sizeof(typename T::value_type), in);
+            T s {};
+            auto const size = _read<std::size_t>();
+            if constexpr (ResizableContiguous<T>)
+                s.resize(size);
+            else if (size != std::ranges::size(s))
+                throw std::runtime_error(
+                    "cppconfig: fixed size container length mismatch, file has "
+                    + std::to_string(size) + " expected " + std::to_string(std::ranges::size(s)));
+            _read_data(std::ranges::data(s), size * sizeof(value_t<T>), in);
             return s;
         }
         else if constexpr (Fundamental<T>)

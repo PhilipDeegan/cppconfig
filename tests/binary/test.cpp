@@ -5,6 +5,7 @@
 
 #include "cppconfig/io/bin.hpp"
 
+#include <array>
 #include <iterator>
 
 
@@ -154,6 +155,19 @@ TEST_CASE("binary errors fail loudly", "[cppconfig]")
         auto const loaded = load_config<MyDict>("outfile.empty_map.dat");
         REQUIRE(loaded["a"]["b"].isNode());
         REQUIRE(loaded["c"].to<int>() == 1);
+    }
+
+    SECTION("std::array round trips, length mismatch throws")
+    {
+        using ArrDict = cppdict::Dict<int, std::array<double, 3>>;
+        using ArrDict2 = cppdict::Dict<int, std::array<double, 2>>;
+        ArrDict ad;
+        ad["arr"] = std::array<double, 3> { 1, 2, 3 };
+        save_config("outfile.array.dat", ad);
+        REQUIRE(load_config<ArrDict>("outfile.array.dat")["arr"].to<std::array<double, 3>>()
+            == std::array<double, 3> { 1, 2, 3 });
+        // same tag index, different extent
+        REQUIRE_THROWS(load_config<ArrDict2>("outfile.array.dat"));
     }
 
     SECTION("truncated file")
