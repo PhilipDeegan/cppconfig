@@ -2,7 +2,7 @@ project(
   'cppconfig',
   'cpp',
   version : '1.0.1',
-  default_options : ['warning_level=3', 'cpp_std=c++20'],
+  default_options : ['warning_level=3', 'cpp_std=c++20', 'catch2:tests=false'],
   license : 'GPL3'
 )
 
@@ -16,7 +16,7 @@ cppconfig_dep = declare_dependency(
                         dependencies:[yaml_cpp_dep, nlohmann_json_dep, cppdict_dep]
                         )
 
-library('cppconfig', extra_files:['include/cppconfig/cppconfig.hpp', 'include/cppconfig/io/yaml.hpp', 'include/cppconfig/io/json.hpp'])
+library('cppconfig', extra_files:['include/cppconfig/cppconfig.hpp', 'include/cppconfig/io/yaml.hpp', 'include/cppconfig/io/json.hpp', 'include/cppconfig/io/bin.hpp'])
 
 foreach test:['binary', 'yaml', 'json']
     exe = executable(test,'tests/'+test+'/test.cpp',

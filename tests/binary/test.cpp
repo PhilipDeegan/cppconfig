@@ -5,6 +5,8 @@
 
 #include "cppconfig/io/bin.hpp"
 
+#include <iterator>
+
 
 TEST_CASE("can read/write", "[cppconfig]")
 {
@@ -40,8 +42,7 @@ struct CustomSerializable
     int a = 111;
     double b = 333;
 
-    bool operator==(CustomSerializable const& cs) { return a == cs.a and b == cs.b; }
-    bool operator!=(CustomSerializable const& cs) { return !(*this == cs); }
+    bool operator==(CustomSerializable const& cs) const { return a == cs.a and b == cs.b; }
 };
 
 
@@ -117,5 +118,55 @@ TEST_CASE("can read/write custom serializable", "[cppconfig]")
             REQUIRE(md["custom"]["data"].to<CustomSerializable>() == cs);
             REQUIRE(md["key2"].to<int>() == 2);
         }
+    }
+}
+
+
+TEST_CASE("binary errors fail loudly", "[cppconfig]")
+{
+    using MyDict = cppdict::Dict<int, double, std::string>;
+    using namespace cppconfig::config_binary;
+
+    SECTION("missing file")
+    {
+        REQUIRE_THROWS(load_config<MyDict>("does/not/exist.dat"));
+    }
+
+    SECTION("empty leaf")
+    {
+        MyDict md;
+        md["a"]["b"];
+        REQUIRE_THROWS(save_config("outfile.empty_leaf.dat", md));
+    }
+
+    SECTION("empty config round trips")
+    {
+        save_config("outfile.empty.dat", MyDict {});
+        REQUIRE(load_config<MyDict>("outfile.empty.dat").isEmpty());
+    }
+
+    SECTION("empty map round trips as a map")
+    {
+        MyDict md;
+        md["a"]["b"].data = MyDict::node_t {};
+        md["c"] = 1;
+        save_config("outfile.empty_map.dat", md);
+        auto const loaded = load_config<MyDict>("outfile.empty_map.dat");
+        REQUIRE(loaded["a"]["b"].isNode());
+        REQUIRE(loaded["c"].to<int>() == 1);
+    }
+
+    SECTION("truncated file")
+    {
+        std::string const file("outfile.truncated.dat");
+        MyDict md;
+        md["key"] = std::string { "Value" };
+        save_config(file, md);
+        {
+            std::ifstream in { file, std::ios::binary };
+            std::string bytes { std::istreambuf_iterator<char>(in), {} };
+            std::ofstream { file, std::ios::binary }.write(bytes.data(), bytes.size() - 2);
+        }
+        REQUIRE_THROWS(load_config<MyDict>(file));
     }
 }
