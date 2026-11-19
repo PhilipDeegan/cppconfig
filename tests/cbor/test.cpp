@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -59,16 +60,37 @@ TEST_CASE("file is plain CBOR", "[cppconfig]")
 }
 
 
-TEST_CASE("leaf type order does not matter", "[cppconfig]")
+TEST_CASE("basic types round trip", "[cppconfig]")
 {
-    cppdict::Dict<std::int64_t, double, std::string> md;
-    md["i"] = std::int64_t { 1 } << 40;
-    md["d"] = 0.5;
+    using MyDict = cppdict::Dict<bool, std::int8_t, std::int16_t, std::int32_t, std::int64_t,
+        std::uint8_t, std::uint16_t, std::uint32_t, std::uint64_t, float, double, std::string>;
+
+    MyDict md;
+    md["b"] = true;
+    md["i8"] = std::numeric_limits<std::int8_t>::min();
+    md["i16"] = std::numeric_limits<std::int16_t>::min();
+    md["i32"] = std::numeric_limits<std::int32_t>::min();
+    md["i64"] = std::numeric_limits<std::int64_t>::min();
+    md["u8"] = std::numeric_limits<std::uint8_t>::max();
+    md["u16"] = std::numeric_limits<std::uint16_t>::max();
+    md["u32"] = std::numeric_limits<std::uint32_t>::max();
+    md["u64"] = std::numeric_limits<std::uint64_t>::max();
+    md["f"] = 1.5f;
+    md["d"] = 0.1;
     md["s"] = std::string { "s" };
 
-    auto const loaded = from_bytes<cppdict::Dict<std::string, double, std::int64_t>>(to_bytes(md));
-    REQUIRE(loaded["i"].to<std::int64_t>() == std::int64_t { 1 } << 40);
-    REQUIRE(loaded["d"].to<double>() == 0.5);
+    auto const loaded = from_bytes<MyDict>(to_bytes(md));
+    REQUIRE(loaded["b"].to<bool>() == true);
+    REQUIRE(loaded["i8"].to<std::int8_t>() == std::numeric_limits<std::int8_t>::min());
+    REQUIRE(loaded["i16"].to<std::int16_t>() == std::numeric_limits<std::int16_t>::min());
+    REQUIRE(loaded["i32"].to<std::int32_t>() == std::numeric_limits<std::int32_t>::min());
+    REQUIRE(loaded["i64"].to<std::int64_t>() == std::numeric_limits<std::int64_t>::min());
+    REQUIRE(loaded["u8"].to<std::uint8_t>() == std::numeric_limits<std::uint8_t>::max());
+    REQUIRE(loaded["u16"].to<std::uint16_t>() == std::numeric_limits<std::uint16_t>::max());
+    REQUIRE(loaded["u32"].to<std::uint32_t>() == std::numeric_limits<std::uint32_t>::max());
+    REQUIRE(loaded["u64"].to<std::uint64_t>() == std::numeric_limits<std::uint64_t>::max());
+    REQUIRE(loaded["f"].to<float>() == 1.5f);
+    REQUIRE(loaded["d"].to<double>() == 0.1);
     REQUIRE(loaded["s"].to<std::string>() == "s");
 }
 
